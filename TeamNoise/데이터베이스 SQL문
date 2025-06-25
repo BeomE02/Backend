@@ -1,0 +1,342 @@
+-- Clink 프로젝트 데이터베이스 생성
+CREATE DATABASE IF NOT EXISTS clink_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE clink_db;
+
+-- 1. 사용자 테이블 (users)
+CREATE TABLE users (
+    user_id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    role ENUM('student', 'professor') NOT NULL DEFAULT 'student',
+    phone VARCHAR(20),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_active BOOLEAN DEFAULT TRUE
+);
+
+-- 2. 수업 테이블 (classes)
+CREATE TABLE classes (
+    class_id INT AUTO_INCREMENT PRIMARY KEY,
+    class_code VARCHAR(10) UNIQUE NOT NULL,
+    class_name VARCHAR(200) NOT NULL,
+    professor_id INT NOT NULL,
+    description TEXT,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    class_days VARCHAR(20), -- 'mon,wed,fri' 형태로 저장
+    start_time TIME NOT NULL,
+    end_time TIME NOT NULL,
+    max_students INT DEFAULT 50,
+    status ENUM('scheduled', 'active', 'ended') DEFAULT 'scheduled',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (professor_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+-- 3. 수업 참여 테이블 (class_enrollments)
+CREATE TABLE class_enrollments (
+    enrollment_id INT AUTO_INCREMENT PRIMARY KEY,
+    class_id INT NOT NULL,
+    student_id INT NOT NULL,
+    enrolled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    attendance_rate DECIMAL(5,2) DEFAULT 0.00,
+    is_active BOOLEAN DEFAULT TRUE,
+    FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE CASCADE,
+    FOREIGN KEY (student_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    UNIQUE KEY unique_enrollment (class_id, student_id)
+);
+
+-- 4. 게시판 카테고리 테이블 (board_categories)
+CREATE TABLE board_categories (
+    category_id INT AUTO_INCREMENT PRIMARY KEY,
+    category_name VARCHAR(50) NOT NULL,
+    category_code VARCHAR(20) UNIQUE NOT NULL,
+    description TEXT,
+    is_active BOOLEAN DEFAULT TRUE
+);
+
+-- 5. 게시글 테이블 (posts)
+CREATE TABLE posts (
+    post_id INT AUTO_INCREMENT PRIMARY KEY,
+    category_id INT NOT NULL,
+    class_id INT,
+    author_id INT NOT NULL,
+    title VARCHAR(500) NOT NULL,
+    content TEXT NOT NULL,
+    view_count INT DEFAULT 0,
+    is_anonymous BOOLEAN DEFAULT FALSE,
+    is_pinned BOOLEAN DEFAULT FALSE,
+    status ENUM('active', 'deleted', 'blocked') DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (category_id) REFERENCES board_categories(category_id),
+    FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE CASCADE,
+    FOREIGN KEY (author_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+-- 6. 댓글 테이블 (comments)
+CREATE TABLE comments (
+    comment_id INT AUTO_INCREMENT PRIMARY KEY,
+    post_id INT NOT NULL,
+    author_id INT NOT NULL,
+    content TEXT NOT NULL,
+    parent_comment_id INT,
+    is_anonymous BOOLEAN DEFAULT FALSE,
+    status ENUM('active', 'deleted', 'blocked') DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (post_id) REFERENCES posts(post_id) ON DELETE CASCADE,
+    FOREIGN KEY (author_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (parent_comment_id) REFERENCES comments(comment_id) ON DELETE CASCADE
+);
+
+-- 7. 파일 첨부 테이블 (attachments)
+CREATE TABLE attachments (
+    attachment_id INT AUTO_INCREMENT PRIMARY KEY,
+    post_id INT,
+    original_filename VARCHAR(255) NOT NULL,
+    stored_filename VARCHAR(255) NOT NULL,
+    file_path VARCHAR(500) NOT NULL,
+    file_size BIGINT NOT NULL,
+    file_type VARCHAR(100),
+    mime_type VARCHAR(100),
+    download_count INT DEFAULT 0,
+    uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (post_id) REFERENCES posts(post_id) ON DELETE CASCADE
+);
+
+-- 8. 과제 테이블 (assignments)
+CREATE TABLE assignments (
+    assignment_id INT AUTO_INCREMENT PRIMARY KEY,
+    class_id INT NOT NULL,
+    title VARCHAR(500) NOT NULL,
+    description TEXT,
+    due_date DATETIME NOT NULL,
+    max_score INT DEFAULT 100,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE CASCADE
+);
+
+-- 9. 과제 제출 테이블 (assignment_submissions)
+CREATE TABLE assignment_submissions (
+    submission_id INT AUTO_INCREMENT PRIMARY KEY,
+    assignment_id INT NOT NULL,
+    student_id INT NOT NULL,
+    submission_text TEXT,
+    file_path VARCHAR(500),
+    score INT,
+    feedback TEXT,
+    submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    graded_at TIMESTAMP NULL,
+    status ENUM('submitted', 'graded', 'late') DEFAULT 'submitted',
+    FOREIGN KEY (assignment_id) REFERENCES assignments(assignment_id) ON DELETE CASCADE,
+    FOREIGN KEY (student_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    UNIQUE KEY unique_submission (assignment_id, student_id)
+);
+
+-- 10. 질문 테이블 (questions)
+CREATE TABLE questions (
+    question_id INT AUTO_INCREMENT PRIMARY KEY,
+    class_id INT NOT NULL,
+    student_id INT NOT NULL,
+    question_text TEXT NOT NULL,
+    answer_text TEXT,
+    professor_id INT,
+    vote_count INT DEFAULT 0,
+    is_anonymous BOOLEAN DEFAULT FALSE,
+    status ENUM('pending', 'answered', 'archived') DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    answered_at TIMESTAMP NULL,
+    FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE CASCADE,
+    FOREIGN KEY (student_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (professor_id) REFERENCES users(user_id) ON DELETE SET NULL
+);
+
+-- 11. 질문 투표 테이블 (question_votes)
+CREATE TABLE question_votes (
+    vote_id INT AUTO_INCREMENT PRIMARY KEY,
+    question_id INT NOT NULL,
+    user_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (question_id) REFERENCES questions(question_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    UNIQUE KEY unique_vote (question_id, user_id)
+);
+
+-- 12. 투표 테이블 (polls)
+CREATE TABLE polls (
+    poll_id INT AUTO_INCREMENT PRIMARY KEY,
+    class_id INT NOT NULL,
+    professor_id INT NOT NULL,
+    title VARCHAR(500) NOT NULL,
+    description TEXT,
+    is_multiple_choice BOOLEAN DEFAULT FALSE,
+    is_anonymous BOOLEAN DEFAULT TRUE,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NULL,
+    FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE CASCADE,
+    FOREIGN KEY (professor_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+-- 13. 투표 옵션 테이블 (poll_options)
+CREATE TABLE poll_options (
+    option_id INT AUTO_INCREMENT PRIMARY KEY,
+    poll_id INT NOT NULL,
+    option_text VARCHAR(500) NOT NULL,
+    vote_count INT DEFAULT 0,
+    option_order INT DEFAULT 0,
+    FOREIGN KEY (poll_id) REFERENCES polls(poll_id) ON DELETE CASCADE
+);
+
+-- 14. 투표 응답 테이블 (poll_responses)
+CREATE TABLE poll_responses (
+    response_id INT AUTO_INCREMENT PRIMARY KEY,
+    poll_id INT NOT NULL,
+    option_id INT NOT NULL,
+    user_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (poll_id) REFERENCES polls(poll_id) ON DELETE CASCADE,
+    FOREIGN KEY (option_id) REFERENCES poll_options(option_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    UNIQUE KEY unique_response (poll_id, user_id, option_id)
+);
+
+-- 15. 출석 테이블 (attendance)
+CREATE TABLE attendance (
+    attendance_id INT AUTO_INCREMENT PRIMARY KEY,
+    class_id INT NOT NULL,
+    student_id INT NOT NULL,
+    attendance_date DATE NOT NULL,
+    status ENUM('present', 'absent', 'late') DEFAULT 'present',
+    check_in_time TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE CASCADE,
+    FOREIGN KEY (student_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    UNIQUE KEY unique_attendance (class_id, student_id, attendance_date)
+);
+
+-- 16. 교수 인증 코드 테이블 (professor_auth_codes)
+CREATE TABLE professor_auth_codes (
+    code_id INT AUTO_INCREMENT PRIMARY KEY,
+    auth_code VARCHAR(50) UNIQUE NOT NULL,
+    description VARCHAR(200),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NULL
+);
+
+-- ================================================
+-- 초기 데이터 삽입
+-- ================================================
+
+-- 게시판 카테고리 초기 데이터
+INSERT INTO board_categories (category_name, category_code, description) VALUES
+('자유게시판', 'free', '자유롭게 소통할 수 있는 게시판'),
+('질문게시판', 'question', '학습 관련 질문을 올리는 게시판'),
+('사진게시판', 'photo', '사진을 공유하는 게시판'),
+('자료게시판', 'data', '학습 자료를 공유하는 게시판');
+
+-- 교수 인증 코드 초기 데이터
+INSERT INTO professor_auth_codes (auth_code, description) VALUES
+('PROF2025', '2025년 교수 인증 코드'),
+('TEACHER01', '교수용 기본 인증 코드'),
+('ADMIN2025', '관리자용 인증 코드');
+
+-- 테스트용 사용자 데이터
+INSERT INTO users (username, password, name, role) VALUES
+('admin', 'admin123', '관리자', 'professor'),
+('prof01', 'prof123', '이민우', 'professor'),
+('student01', 'pass123', '김철수', 'student'),
+('student02', 'pass123', '이영희', 'student'),
+('student03', 'pass123', '박민수', 'student');
+
+-- 테스트용 수업 데이터
+INSERT INTO classes (class_code, class_name, professor_id, description, start_date, end_date, class_days, start_time, end_time, status) VALUES
+('WEB101', '웹 프로그래밍 기초', 2, 'HTML, CSS, JavaScript를 배우는 기초 수업', '2025-05-18', '2025-06-22', 'mon,wed', '10:00:00', '12:00:00', 'active'),
+('DSA202', '자료구조', 2, '기본적인 자료구조와 알고리즘을 배우는 수업', '2025-04-10', '2025-07-10', 'tue,thu', '13:00:00', '15:00:00', 'active');
+
+-- 테스트용 수업 참여 데이터
+INSERT INTO class_enrollments (class_id, student_id) VALUES
+(1, 3), (1, 4), (1, 5),
+(2, 3), (2, 4);
+
+-- 테스트용 게시글 데이터
+INSERT INTO posts (category_id, class_id, author_id, title, content) VALUES
+(1, 1, 3, '안녕하세요', '자유게시판에 첫 글을 작성합니다. 잘 부탁드립니다!'),
+(2, 1, 4, 'CSS 질문입니다', 'Flexbox 사용법에 대해 궁금한 점이 있습니다.');
+
+-- 인덱스 생성 (성능 향상)
+CREATE INDEX idx_posts_category_class ON posts(category_id, class_id);
+CREATE INDEX idx_posts_created_at ON posts(created_at);
+CREATE INDEX idx_comments_post_id ON comments(post_id);
+CREATE INDEX idx_class_enrollments_student ON class_enrollments(student_id);
+CREATE INDEX idx_questions_class_status ON questions(class_id, status);
+CREATE INDEX idx_attendance_date ON attendance(attendance_date);
+
+-- ================================================
+-- 뷰 생성 (복잡한 쿼리 단순화)
+-- ================================================
+
+-- 수업별 통계 뷰
+CREATE VIEW class_statistics AS
+SELECT 
+    c.class_id,
+    c.class_name,
+    c.class_code,
+    u.name as professor_name,
+    COUNT(DISTINCT ce.student_id) as total_students,
+    COUNT(DISTINCT p.post_id) as total_posts,
+    COUNT(DISTINCT q.question_id) as total_questions,
+    COUNT(DISTINCT a.assignment_id) as total_assignments,
+    COALESCE(AVG(att.attendance_rate), 0) as avg_attendance_rate
+FROM classes c
+LEFT JOIN users u ON c.professor_id = u.user_id
+LEFT JOIN class_enrollments ce ON c.class_id = ce.class_id AND ce.is_active = TRUE
+LEFT JOIN posts p ON c.class_id = p.class_id AND p.status = 'active'
+LEFT JOIN questions q ON c.class_id = q.class_id
+LEFT JOIN assignments a ON c.class_id = a.class_id AND a.is_active = TRUE
+LEFT JOIN (
+    SELECT 
+        ce2.class_id, 
+        ce2.student_id,
+        COALESCE(ce2.attendance_rate, 0) as attendance_rate
+    FROM class_enrollments ce2
+) att ON c.class_id = att.class_id
+GROUP BY c.class_id, c.class_name, c.class_code, u.name;
+
+-- 게시글 목록 뷰 (작성자 정보 포함)
+CREATE VIEW post_list_view AS
+SELECT 
+    p.post_id,
+    p.title,
+    p.content,
+    p.view_count,
+    p.is_anonymous,
+    p.is_pinned,
+    p.created_at,
+    p.updated_at,
+    bc.category_name,
+    bc.category_code,
+    c.class_name,
+    c.class_code,
+    CASE 
+        WHEN p.is_anonymous = TRUE THEN '익명'
+        ELSE u.name 
+    END as author_name,
+    u.user_id as author_id,
+    COUNT(cm.comment_id) as comment_count
+FROM posts p
+JOIN board_categories bc ON p.category_id users= bc.category_id
+LEFT JOIN classes c ON p.class_id = c.class_id
+JOIN users u ON p.author_id = u.user_id
+LEFT JOIN comments cm ON p.post_id = cm.post_id AND cm.status = 'active'
+WHERE p.status = 'active'
+GROUP BY p.post_id, p.title, p.content, p.view_count, p.is_anonymous, p.is_pinned, 
+         p.created_at, p.updated_at, bc.category_name, bc.category_code, 
+         c.class_name, c.class_code, u.name, u.user_id;
+
+clink_db
