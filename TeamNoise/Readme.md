@@ -1,6 +1,6 @@
 # 📚 Clink - 온라인 강의실 플랫폼
 
-![Clink Logo](WebContent/image/logo.png)
+![Clink Logo](logo.png)
 
 ## 🚀 프로젝트 개요
 
